@@ -108,9 +108,9 @@ app.post('/api/admin/message', checkAuth, async (req, res) => {
   try {
     // إرسال الإيميل
     await transporter.sendMail({
-      from: `"Teacher" <${process.env.SMTP_USER}>`,
+      from: `"pharmacy" <${process.env.SMTP_USER}>`,
       to: email,
-      subject: 'رسالة من مدرسة الجهاد(مش حقيقي علشان متحبسناش)',
+      subject: 'رسالة من صيدلية د/ميرنا (مشيها ان الصيدلية بعتالك رسالة 🙂❤)',
       text: message,
       html: `<p>${message}</p>`
     });
