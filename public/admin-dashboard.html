@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="ar">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>لوحة تحكم الادمن</title>
+  <style>
+    body {
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      padding: 20px;
+      direction: rtl;
+      background: #f0f0f0;
+    }
+
+    h1 {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    button {
+      background-color: #007bff;
+      color: white;
+      border: none;
+      padding: 10px 18px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 1em;
+    }
+
+    button:hover {
+      background-color: #0056b3;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+      background: white;
+    }
+
+    th,
+    td {
+      border: 1px solid #ccc;
+      padding: 8px 12px;
+      text-align: center;
+    }
+
+    th {
+      background-color: #007bff;
+      color: white;
+    }
+
+    #messages {
+      margin-top: 40px;
+    }
+
+    textarea {
+      width: 100%;
+      height: 80px;
+      resize: vertical;
+    }
+
+    input[type="email"] {
+      width: 300px;
+      padding: 8px;
+      margin-top: 10px;
+    }
+
+    .response {
+      margin-top: 10px;
+      font-weight: bold;
+      color: green;
+    }
+
+    .error {
+      color: red;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>لوحة تحكم الادمن</h1>
+
+  <button id="logoutBtn">تسجيل خروج</button>
+
+  <h2>بيانات المستخدمين المرسلة</h2>
+  <table id="usersTable">
+    <thead>
+      <tr>
+        <th>الاسم</th>
+        <th>البريد الإلكتروني</th>
+        <th>رقم التليفون</th>
+        <th>تاريخ الإرسال</th>
+        <th>حذف</th>
+      </tr>
+    </thead>
+    <tbody>
+      <!-- هنا تظهر بيانات المستخدمين -->
+    </tbody>
+  </table>
+
+  <div id="messages">
+    <h2>إرسال رسالة إلى مستخدم</h2>
+
+    <label for="emailInput">البريد الإلكتروني للمستخدم:</label><br />
+    <input type="email" id="emailInput" placeholder="example@domain.com" required /><br />
+
+    <label for="messageInput">نص الرسالة:</label><br />
+    <textarea id="messageInput" placeholder="اكتب رسالتك هنا..." required></textarea><br />
+
+    <button id="sendMessageBtn">إرسال الرسالة</button>
+
+    <div id="responseMsg"></div>
+  </div>
+
+  <script>
+    const usersTableBody = document.querySelector("#usersTable tbody");
+    const logoutBtn = document.getElementById("logoutBtn");
+    const emailInput = document.getElementById("emailInput");
+    const messageInput = document.getElementById("messageInput");
+    const sendMessageBtn = document.getElementById("sendMessageBtn");
+    const responseMsg = document.getElementById("responseMsg");
+
+    // تحميل بيانات المستخدمين
+    async function loadUsers() {
+      try {
+        const res = await fetch('/api/admin/users');
+        if (!res.ok) throw new Error('خطأ في تحميل البيانات');
+        const users = await res.json();
+
+        usersTableBody.innerHTML = '';
+        users.forEach(user => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${user.name}</td>
+            <td>${user.email}</td>
+            <td>${user.phone}</td>
+            <td>${new Date(user.receivedAt).toLocaleString('ar-EG')}</td>
+            <td><button class="delete-btn" data-email="${user.email}">🗑️</button></td>
+          `;
+          usersTableBody.appendChild(tr);
+        });
+
+        // إضافة مستمع حدث لأزرار الحذف
+        document.querySelectorAll('.delete-btn').forEach(btn => {
+          btn.addEventListener('click', async (e) => {
+            const email = e.target.getAttribute('data-email');
+            if (confirm(`هل أنت متأكد من حذف المستخدم ${email}؟`)) {
+              try {
+                const res = await fetch(`/api/admin/user/${encodeURIComponent(email)}`, {
+                  method: 'DELETE'
+                });
+                const data = await res.json();
+                if (res.ok) {
+                  alert(data.message);
+                  loadUsers(); // إعادة تحميل الجدول بعد الحذف
+                } else {
+                  alert(data.error || 'حدث خطأ أثناء الحذف');
+                }
+              } catch {
+                alert('تعذر الاتصال بالخادم');
+              }
+            }
+          });
+        });
+      } catch (error) {
+        usersTableBody.innerHTML = '<tr><td colspan="5">تعذر تحميل البيانات</td></tr>';
+      }
+    }
+
+    // تسجيل خروج الادمن
+    logoutBtn.addEventListener('click', async () => {
+      try {
+        const res = await fetch('/api/admin/logout', { method: 'POST' });
+        if (res.ok) {
+          window.location.href = '/admin-login.html';
+        } else {
+          alert('خطأ أثناء تسجيل الخروج');
+        }
+      } catch {
+        alert('تعذر الاتصال بالخادم');
+      }
+    });
+
+    // إرسال رسالة إلى مستخدم
+    sendMessageBtn.addEventListener('click', async () => {
+      responseMsg.textContent = '';
+      responseMsg.classList.remove('error');
+
+      const email = emailInput.value.trim();
+      const message = messageInput.value.trim();
+
+      if (!email || !message) {
+        responseMsg.textContent = 'يرجى إدخال البريد الإلكتروني والرسالة';
+        responseMsg.classList.add('error');
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/admin/message', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, message })
+        });
+
+        const data = await res.json();
+
+        if (res.ok) {
+          responseMsg.textContent = data.message;
+          emailInput.value = '';
+          messageInput.value = '';
+        } else {
+          responseMsg.textContent = data.error || 'حدث خطأ أثناء الإرسال';
+          responseMsg.classList.add('error');
+        }
+      } catch {
+        responseMsg.textContent = 'تعذر الاتصال بالخادم';
+        responseMsg.classList.add('error');
+      }
+    });
+
+    loadUsers();
+  </script>
+</body>
+
+</html>
