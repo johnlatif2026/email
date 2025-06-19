@@ -4,6 +4,7 @@ const cors = require('cors');
 const bodyParser = require('body-parser');
 const session = require('express-session');
 const path = require('path');
+const nodemailer = require('nodemailer');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -36,6 +37,17 @@ function checkAuth(req, res, next) {
     res.status(401).json({ error: 'Unauthorized' });
   }
 }
+
+// إعداد nodemailer مع بيانات SMTP من .env
+const transporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST,       // مثلاً smtp.gmail.com
+  port: process.env.SMTP_PORT,       // غالباً 465 (SSL) أو 587 (TLS)
+  secure: process.env.SMTP_SECURE === 'true', // true لو SSL
+  auth: {
+    user: process.env.SMTP_USER,     // إيميل الإرسال
+    pass: process.env.SMTP_PASS      // كلمة سر التطبيق (App Password)
+  }
+});
 
 // استقبال بيانات المستخدم من نموذج الموقع العادي
 app.post('/api/submit', (req, res) => {
@@ -71,29 +83,35 @@ app.get('/api/admin/users', checkAuth, (req, res) => {
   res.json(usersData);
 });
 
-// حذف مستخدم عن طريق البريد الإلكتروني (محمي)
-app.delete('/api/admin/user/:email', checkAuth, (req, res) => {
-  const email = req.params.email;
-  const index = usersData.findIndex(u => u.email === email);
-  if (index !== -1) {
-    usersData.splice(index, 1);
-    return res.json({ message: 'تم حذف المستخدم بنجاح' });
-  }
-  res.status(404).json({ error: 'المستخدم غير موجود' });
-});
-
 app.get('/admin', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'admin.html'));
 });
 
-// إضافة رسالة الرد (الإيميل والرسالة) من الادمن (محمي)
-app.post('/api/admin/message', checkAuth, (req, res) => {
+// إضافة رسالة الرد (الإيميل والرسالة) من الادمن (محمي) + إرسال إيميل فعلي
+app.post('/api/admin/message', checkAuth, async (req, res) => {
   const { email, message } = req.body;
   if (!email || !message) {
     return res.status(400).json({ error: 'البريد الإلكتروني والرسالة مطلوبين' });
   }
-  adminMessages.push({ email, message, sentAt: new Date() });
-  res.json({ message: 'تم إرسال الرسالة بنجاح' });
+
+  try {
+    // إرسال الإيميل
+    await transporter.sendMail({
+      from: `"Admin" <${process.env.SMTP_USER}>`,
+      to: email,
+      subject: 'رسالة من لوحة تحكم الادمن',
+      text: message,
+      html: `<p>${message}</p>`
+    });
+
+    // حفظ الرسالة بعد الإرسال
+    adminMessages.push({ email, message, sentAt: new Date() });
+
+    res.json({ message: 'تم إرسال الرسالة بنجاح' });
+  } catch (err) {
+    console.error('خطأ في إرسال الإيميل:', err);
+    res.status(500).json({ error: 'حدث خطأ أثناء إرسال الإيميل' });
+  }
 });
 
 // جلب كل الرسائل (محمي)
